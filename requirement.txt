@@ -1,0 +1,25 @@
+# Project Requirements for MindVault (Visual Second Brain)
+
+## Frontend
+- React ^19.2.5
+- React-DOM ^19.2.5
+- Vite ^8.0.10
+- Lucide-React ^1.11.0
+
+## Backend & Database
+- Supabase (Backend as a Service)
+- @supabase/supabase-js ^2.104.1
+
+## Database Tables (Supabase)
+- cards (id, owner_id, type, title, content, thumbnail_url, storage_path, mime_type, size, color, metadata, starred, trashed, created_at, updated_at)
+- tags (id, owner_id, name, color, created_at)
+- card_tags (card_id, tag_id)
+
+## Development Tools
+- Node.js >= 18.0.0
+- npm >= 9.0.0
+- TypeScript ~6.0.2
+
+## Environment Variables
+- VITE_SUPABASE_URL
+- VITE_SUPABASE_ANON_KEY
