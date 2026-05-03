@@ -404,37 +404,44 @@ export default function MindApp({ user, onSignOut }) {
     if (repairRan.current || cards.length === 0) return;
     repairRan.current = true;
 
+    const isBadTitle = (title, content) => {
+      const t = (title || '').trim().toLowerCase();
+      if (!t) return true;
+      // Title is the raw URL itself
+      if (t.startsWith('http://') || t.startsWith('https://')) return true;
+      // Title is just a hostname
+      try {
+        const hostname = new URL(content.startsWith('http') ? content : 'https://' + content).hostname.replace('www.', '').toLowerCase();
+        if (t === hostname || t === 'www.' + hostname) return true;
+      } catch {}
+      return false;
+    };
+
     const needsRepair = cards.filter(c => {
       if (c.type !== 'link' || !c.content) return false;
-      const title = (c.title || '').trim();
-      if (!title) return true;
-      // Title is just a hostname (e.g. "youtu.be", "dribbble.com")
-      try {
-        const hostname = new URL(c.content.startsWith('http') ? c.content : 'https://' + c.content).hostname.replace('www.', '');
-        if (title === hostname || title === 'www.' + hostname) return true;
-      } catch {}
-      // Title is the raw URL itself
-      if (title.startsWith('http://') || title.startsWith('https://')) return true;
-      return false;
+      return isBadTitle(c.title, c.content);
     });
 
     if (needsRepair.length === 0) return;
 
     (async () => {
+      let anyFixed = false;
       for (const card of needsRepair) {
         try {
           const meta = await fetchLinkMeta(card.content);
-          if (meta.title && meta.title !== card.title) {
+          // Only update if the new title is actually useful (not another hostname)
+          if (meta.title && !isBadTitle(meta.title, card.content)) {
             const updates = { title: meta.title };
             if (meta.image && !card.thumbnail_url) updates.thumbnail_url = meta.image;
             if (meta.siteName || meta.description) {
               updates.metadata = { ...(card.metadata || {}), ...meta, linkType: meta.type };
             }
             await svc.updateCard(card.id, updates);
+            anyFixed = true;
           }
         } catch {}
       }
-      loadData();
+      if (anyFixed) loadData();
     })();
   }, [cards]);
 

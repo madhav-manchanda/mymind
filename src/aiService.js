@@ -2,35 +2,67 @@
 export async function fetchLinkMeta(url) {
   const u = url.startsWith('http') ? url : 'https://' + url;
 
-  // Strategy 0: YouTube / Vimeo — use noembed (free, CORS-friendly, reliable titles)
+  // Strategy 0: YouTube — use YouTube's own oEmbed (CORS-friendly)
   const isYouTube = /youtube\.com|youtu\.be/i.test(u);
-  const isVimeo = /vimeo\.com/i.test(u);
-  if (isYouTube || isVimeo) {
+  if (isYouTube) {
     try {
+      // Normalize to full youtube.com URL for oembed
+      let ytUrl = u;
+      const ytMatch = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (ytMatch) {
+        ytUrl = `https://www.youtube.com/watch?v=${ytMatch[1]}`;
+      }
       const res = await fetch(
-        `https://noembed.com/embed?url=${encodeURIComponent(u)}`,
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(ytUrl)}&format=json`,
         { signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined }
       );
-      const d = await res.json();
-      if (d.title) {
-        const hostname = new URL(u).hostname.replace('www.', '');
-        // For YouTube, extract video ID for high-quality thumbnail
-        const ytMatch = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        const thumb = ytMatch
-          ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`
-          : (d.thumbnail_url || '');
-        return {
-          title:       d.title || '',
-          description: '',
-          image:       thumb,
-          screenshot:  '',
-          favicon:     `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`,
-          siteName:    d.provider_name || hostname,
-          type:        'video',
-          url: u,
-          author: d.author_name || '',
-          date: '',
-        };
+      if (res.ok) {
+        const d = await res.json();
+        if (d.title) {
+          const thumb = ytMatch
+            ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`
+            : (d.thumbnail_url || '');
+          return {
+            title:       d.title,
+            description: '',
+            image:       thumb,
+            screenshot:  '',
+            favicon:     'https://www.google.com/s2/favicons?domain=youtube.com&sz=64',
+            siteName:    d.author_name || 'YouTube',
+            type:        'video',
+            url: u,
+            author: d.author_name || '',
+            date: '',
+          };
+        }
+      }
+    } catch (e) { console.warn('YouTube oEmbed failed:', e.message); }
+  }
+
+  // Strategy 0b: Vimeo oEmbed
+  const isVimeo = /vimeo\.com/i.test(u);
+  if (isVimeo) {
+    try {
+      const res = await fetch(
+        `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(u)}`,
+        { signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined }
+      );
+      if (res.ok) {
+        const d = await res.json();
+        if (d.title) {
+          return {
+            title:       d.title,
+            description: d.description || '',
+            image:       d.thumbnail_url || '',
+            screenshot:  '',
+            favicon:     'https://www.google.com/s2/favicons?domain=vimeo.com&sz=64',
+            siteName:    d.author_name || 'Vimeo',
+            type:        'video',
+            url: u,
+            author: d.author_name || '',
+            date: '',
+          };
+        }
       }
     } catch {}
   }
