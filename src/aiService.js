@@ -2,6 +2,39 @@
 export async function fetchLinkMeta(url) {
   const u = url.startsWith('http') ? url : 'https://' + url;
 
+  // Strategy 0: YouTube / Vimeo — use noembed (free, CORS-friendly, reliable titles)
+  const isYouTube = /youtube\.com|youtu\.be/i.test(u);
+  const isVimeo = /vimeo\.com/i.test(u);
+  if (isYouTube || isVimeo) {
+    try {
+      const res = await fetch(
+        `https://noembed.com/embed?url=${encodeURIComponent(u)}`,
+        { signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined }
+      );
+      const d = await res.json();
+      if (d.title) {
+        const hostname = new URL(u).hostname.replace('www.', '');
+        // For YouTube, extract video ID for high-quality thumbnail
+        const ytMatch = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        const thumb = ytMatch
+          ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`
+          : (d.thumbnail_url || '');
+        return {
+          title:       d.title || '',
+          description: '',
+          image:       thumb,
+          screenshot:  '',
+          favicon:     `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`,
+          siteName:    d.provider_name || hostname,
+          type:        'video',
+          url: u,
+          author: d.author_name || '',
+          date: '',
+        };
+      }
+    } catch {}
+  }
+
   // Strategy 1: microlink with screenshot
   try {
     const res = await fetch(
