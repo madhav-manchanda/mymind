@@ -398,6 +398,46 @@ export default function MindApp({ user, onSignOut }) {
     return unsub;
   }, [user, loadData]);
 
+  // ── Auto-repair: fix link cards with bad titles (hostname/raw URL) ──
+  const repairRan = useRef(false);
+  useEffect(() => {
+    if (repairRan.current || cards.length === 0) return;
+    repairRan.current = true;
+
+    const needsRepair = cards.filter(c => {
+      if (c.type !== 'link' || !c.content) return false;
+      const title = (c.title || '').trim();
+      if (!title) return true;
+      // Title is just a hostname (e.g. "youtu.be", "dribbble.com")
+      try {
+        const hostname = new URL(c.content.startsWith('http') ? c.content : 'https://' + c.content).hostname.replace('www.', '');
+        if (title === hostname || title === 'www.' + hostname) return true;
+      } catch {}
+      // Title is the raw URL itself
+      if (title.startsWith('http://') || title.startsWith('https://')) return true;
+      return false;
+    });
+
+    if (needsRepair.length === 0) return;
+
+    (async () => {
+      for (const card of needsRepair) {
+        try {
+          const meta = await fetchLinkMeta(card.content);
+          if (meta.title && meta.title !== card.title) {
+            const updates = { title: meta.title };
+            if (meta.image && !card.thumbnail_url) updates.thumbnail_url = meta.image;
+            if (meta.siteName || meta.description) {
+              updates.metadata = { ...(card.metadata || {}), ...meta, linkType: meta.type };
+            }
+            await svc.updateCard(card.id, updates);
+          }
+        } catch {}
+      }
+      loadData();
+    })();
+  }, [cards]);
+
   // ── Live link preview debounce ──
   useEffect(() => {
     if (addType !== 'link') { setLinkPreviewMeta(null); return; }
