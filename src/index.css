@@ -74,10 +74,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); font-weight: 500; }
 .auth-tab.active { color: var(--text-primary); background: var(--bg-card); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 
 /* ═══ THIN SIDEBAR ═══ */
-.thin-sidebar { width: 80px; display: flex; flex-direction: column; align-items: center; padding: 40px 0; border-right: 1px solid var(--border-light); z-index: 100; background: var(--bg-main); flex-shrink: 0; transition: background 0.3s, border-color 0.3s; }
-.sidebar-logo { flex: 1; display: flex; flex-direction: column; align-items: center; }
-.logo-icon { width: 24px; height: 24px; color: var(--text-secondary); margin-bottom: 24px; }
-.rotated-text { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--font-heading); font-size: 26px; font-weight: 500; color: var(--text-secondary); letter-spacing: 1px; }
+.thin-sidebar { width: 56px; display: flex; flex-direction: column; align-items: center; padding: 24px 0; border-right: 1px solid var(--border-light); z-index: 100; background: var(--bg-main); flex-shrink: 0; transition: background 0.3s, border-color 0.3s; justify-content: center; }
 
 .sidebar-icons { display: flex; flex-direction: column; gap: 28px; position: relative; }
 .side-icon { width: 36px; height: 36px; color: var(--text-secondary); cursor: pointer; transition: 0.2s; background: none; border: none; display: flex; align-items: center; justify-content: center; border-radius: 10px; }

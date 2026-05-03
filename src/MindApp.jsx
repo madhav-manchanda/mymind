@@ -11,7 +11,7 @@ import {
   motion, AnimatePresence,
   cardVariants, sidebarIconVariants, modalOverlayVariants, panelVariants,
   sheetVariants, toastVariants, dragOverlayVariants, popupVariants, emptyStateVariants,
-  useGsapLogoEntrance, useGsapSidebarIcons, AmbientParticles
+  useGsapSidebarIcons, AmbientParticles
 } from './animations';
 
 // ─── TYPE ICON MAP ────────────────────────────────────────────────────────────
@@ -350,11 +350,10 @@ export default function MindApp({ user, onSignOut }) {
 
   const fRef = useRef(null);
   const dc = useRef(0);
-  const logoRef = useRef(null);
+
   const iconsRef = useRef(null);
 
   // GSAP entrance animations
-  useGsapLogoEntrance(logoRef);
   useGsapSidebarIcons(iconsRef);
 
   const toast = useCallback((text, type = 'info') => {
@@ -609,10 +608,7 @@ export default function MindApp({ user, onSignOut }) {
 
           {/* SIDEBAR */}
           <nav className="thin-sidebar">
-            <div className="sidebar-logo" style={{ flex: 'none' }} ref={logoRef}>
-              <div className="rotated-text">Vivyn</div>
-            </div>
-            <div className="sidebar-icons" style={{ marginTop: 16 }} ref={iconsRef}>
+            <div className="sidebar-icons" ref={iconsRef}>
               <motion.button className={`side-icon ${!viewStarred && !viewTrash && !search && !showSearch && !showSettings ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setViewStarred(false); setViewTrash(false); setSearch(''); setShowSearch(false); setShowSettings(false); }} title="Home"><Home size={22} /></motion.button>
               <motion.button className={`side-icon ${showSearch ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setShowSearch(!showSearch); setShowSettings(false); }} title="Search"><Search size={22} /></motion.button>
               <motion.button className="side-icon" variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => setAddModal(true)} title="Add new"><Plus size={22} /></motion.button>
