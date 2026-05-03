@@ -656,6 +656,10 @@ export default function MindApp({ user, onSignOut }) {
           {/* MAIN CONTENT */}
           <main className="content-area">
 
+            {/* App Title */}
+            <div className="giant-search-container">
+              <div className="giant-search">Vivyn</div>
+            </div>
 
             <div className="grid-container">
               {cards.length > 0 || search || viewTrash ? (

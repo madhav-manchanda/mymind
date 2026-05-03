@@ -182,7 +182,7 @@ JSON format: {"tags": ["tag1", "tag2"], "title": "concise title under 60 chars",
   }
 }
 
-// ─── UNIFIED AI TAGGER — tries Groq first, falls back to Claude ──────────────
+// ─── UNIFIED AI TAGGER — tries Groq first, falls back to local ──────────────
 export async function autoTagContent(content, type, meta = {}) {
   // Try Groq first (free, fast) if key is configured
   const groqPrompt = type === 'link'
@@ -198,8 +198,9 @@ export async function autoTagContent(content, type, meta = {}) {
     } catch {}
   }
 
-  // Fallback to Claude API (no key needed, uses Anthropic proxy)
-  return callClaudeForTags(content, type, meta);
+  // Fallback to local tagger (Claude API doesn't support CORS from browser)
+  console.warn('Groq unavailable, using local fallback tagger');
+  return generateBasicTags(content, type, meta);
 }
 
 // ─── LOCAL FALLBACK TAGGER (no API needed) ───────────────────────────────────
