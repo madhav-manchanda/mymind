@@ -1,0 +1,575 @@
+================================================================================
+              VIVYN PROJECT — VIVA QUESTIONS & ANSWERS
+================================================================================
+
+This document contains viva questions for the Vivyn project (a personal
+knowledge base / "second brain" web app built with React, Vite & Supabase),
+followed by detailed answers for each question.
+
+================================================================================
+                        SECTION 1: GENERAL / OVERVIEW
+================================================================================
+
+Q1. What is Vivyn and what problem does it solve?
+--------------------------------------------------
+A: Vivyn is a personal knowledge-management web application — a "visual second
+   brain". It lets users save, organise, tag, and search cards of different
+   content types: notes, links (with rich previews), images, files, and quotes.
+   The problem it solves is information overload: instead of losing important
+   links, notes, or files across different apps and browser tabs, everything is
+   captured in one beautiful, searchable, AI-tagged space. Cards can be
+   starred, trashed, filtered by tag or type, and previewed in-app, making
+   retrieval instant.
+
+Q2. What is the tech stack used in this project? Why was Vite chosen over
+    Create React App?
+-------------------------------------------------------------------------
+A: Frontend  : React 19, Vanilla CSS (custom design system), Lucide-React icons,
+               Framer Motion, GSAP, React Three Fiber / Three.js
+   Build tool: Vite 8
+   Backend    : Supabase (PostgreSQL database, GoTrue Auth, S3-compatible Storage,
+               Realtime)
+   AI         : Groq API (llama3-8b-8192), Anthropic Claude, local fallback tagger
+   Deployment : Vercel
+
+   Vite was chosen over Create React App (CRA) because:
+   - It uses native ES modules in development, giving near-instant cold starts.
+   - Hot Module Replacement (HMR) is extremely fast because only the changed
+     module is re-evaluated, not the entire bundle.
+   - Build output via Rollup is smaller and faster than CRA's webpack pipeline.
+   - It has first-class support for environment variables via import.meta.env.
+   - CRA is no longer actively maintained.
+
+Q3. What is the role of Supabase in this project? What services are used?
+--------------------------------------------------------------------------
+A: Supabase acts as the entire backend. Specifically:
+   - Auth (GoTrue): handles sign-up, sign-in, OTP email verification, and
+     password reset flows.
+   - PostgreSQL database: stores cards, tags, and card_tags join table with
+     Row Level Security policies to isolate each user's data.
+   - Storage: stores actual file blobs (images, PDFs, any file) in the
+     'user-files' bucket, with per-user path scoping.
+   - Realtime: the subscribeToCards() function listens to postgres_changes
+     events so the UI updates automatically when data changes from any session.
+
+Q4. Explain the overall architecture of the application.
+---------------------------------------------------------
+A: The architecture is a single-page application (SPA) with a serverless backend:
+   1. Browser loads index.html → Vite bundles and serves React app.
+   2. App.jsx is the root component. On mount it reads Supabase credentials
+      from environment variables and checks the user session.
+   3. If no session exists, AuthScreen is rendered for login/signup/OTP/reset.
+   4. On successful auth, MindApp.jsx renders the main UI with the cards grid,
+      sidebar, and modals.
+   5. All data reads/writes go directly from the browser to Supabase via the
+      supabase-js SDK (no custom API server). RLS enforces security at the DB
+      layer.
+   6. File uploads go directly from the browser to Supabase Storage.
+   7. AI tagging calls Groq or falls back to a local rule-based tagger.
+
+================================================================================
+                        SECTION 2: REACT & FRONTEND
+================================================================================
+
+Q5. How does the authentication flow work in App.jsx? Explain the different
+    modes.
+---------------------------------------------------------------------------
+A: The AuthScreen component uses a `mode` state variable to switch between
+   six screens:
+   - 'login'         : Email + password sign-in form.
+   - 'signup'        : Email + password + confirm password form. On success,
+                       if user exists but no session (email not confirmed),
+                       mode switches to 'verify'.
+   - 'verify'        : Shows OTP input. User enters the 6-digit code received
+                       by email. Calls sb.auth.verifyOtp({ type: 'signup' }).
+   - 'forgot'        : Enter email to request a password-reset OTP.
+   - 'reset-code'    : Enter the 6-digit reset OTP. Calls
+                       sb.auth.verifyOtp({ type: 'recovery' }). Sets
+                       forceAuth=true to keep the session while resetting.
+   - 'reset-password': Enter and confirm the new password. Calls
+                       sb.auth.updateUser({ password: newPw }), then signs out
+                       and redirects to login after 2.5 seconds.
+
+Q6. Why is useEffect used with onAuthStateChange? What is the purpose of
+    unsubscribing?
+-----------------------------------------------------------------------
+A: onAuthStateChange registers a listener that fires every time the auth
+   state changes (sign-in, sign-out, token refresh, OTP verification, etc.).
+   Using it inside useEffect with an empty dependency array means the listener
+   is registered once when the component mounts. When the auth state changes,
+   setUser is called to update React state, causing the correct screen to render
+   automatically without a page reload.
+   The cleanup function returned from useEffect calls subscription.unsubscribe()
+   to remove the listener when the component unmounts. Without this, the listener
+   would remain active and try to call setState on an unmounted component,
+   causing memory leaks and React warnings.
+
+Q7. What is the purpose of formKey state in AuthScreen?
+---------------------------------------------------------
+A: formKey is incremented every time switchMode() is called. It is passed as the
+   `key` prop to the <form> element. In React, changing a component's `key`
+   forces it to be fully unmounted and remounted. This achieves a complete reset
+   of all uncontrolled input values, autofill suggestions, and browser-native
+   form state between mode transitions — ensuring stale data from one form
+   does not bleed into another.
+
+Q8. How does the OTP input work? How is the input restricted to digits only?
+------------------------------------------------------------------------------
+A: The OtpField component renders a standard <input type="text"> with maxLength=6.
+   In the onChange handler, the value is processed with:
+       e.target.value.replace(/\D/g, '')
+   The regex /\D/g matches any non-digit character and replaces it with an empty
+   string, so only numeric digits can appear in the value. The input is also
+   styled with large font size, letter-spacing, and center-aligned text to
+   visually resemble a PIN entry field.
+
+Q9. What is forceAuth state and when is it set to true?
+--------------------------------------------------------
+A: forceAuth is a boolean state in App.jsx (default false). When true, App.jsx
+   renders <AuthScreen> even if a logged-in user exists (`user` is non-null).
+   It is set to true at the start of the reset-code submission (handleResetCodeSubmit)
+   because verifyOtp for recovery type actually creates a short-lived session in
+   Supabase. Without forceAuth, the app would immediately jump to the main
+   MindApp screen after OTP verification instead of letting the user set their
+   new password. After the new password is saved and signOut is called,
+   setForceAuth(false) is called to restore normal behaviour.
+
+Q10. How does conditional rendering work in this app?
+------------------------------------------------------
+A: App.jsx uses a chain of early returns to render the correct screen:
+   1. if (loading) → renders a spinner.
+   2. if (!configured) → renders the Supabase setup card (no .env credentials).
+   3. if (!user || forceAuth) → renders <AuthScreen>.
+   4. Otherwise → renders <MindApp user={user} onSignOut={handleSignOut} />.
+   This is the "guard clause" pattern — each condition exits early so the main
+   render path is only reached when all prerequisites are satisfied.
+
+================================================================================
+                   SECTION 3: SUPABASE & DATABASE
+================================================================================
+
+Q11. What is Row Level Security (RLS) in PostgreSQL? How is it used here?
+--------------------------------------------------------------------------
+A: Row Level Security is a PostgreSQL feature that restricts which rows a
+   database user can read, insert, update, or delete, based on a policy
+   expression evaluated per row. When RLS is enabled on a table and no policy
+   matches, all rows are hidden by default.
+   In this project, after enabling RLS on `cards`, `folders`, and `file_metadata`:
+       CREATE POLICY "Users can CRUD own cards"
+       ON public.cards FOR ALL
+       USING (owner_id = auth.uid())
+       WITH CHECK (owner_id = auth.uid());
+   auth.uid() returns the UUID of the currently authenticated Supabase user.
+   This means a user can only see and modify rows where owner_id equals their own
+   UID — other users' data is completely invisible, even if someone crafts a
+   direct API request.
+
+Q12. Explain the database schema — what tables exist and their relationships.
+------------------------------------------------------------------------------
+A: The main tables are:
+   - cards        : Stores every saved item (note, link, image, file, quote).
+                    Key columns: id (UUID PK), owner_id (FK → auth.users),
+                    type, title, content, thumbnail_url, storage_path,
+                    mime_type, size, color, metadata (JSONB), starred, trashed,
+                    created_at, updated_at.
+   - tags         : Stores tag definitions per user.
+                    Key columns: id, name, owner_id, color.
+   - card_tags    : Many-to-many join table between cards and tags.
+                    Key columns: card_id (FK → cards), tag_id (FK → tags).
+                    A unique constraint on (card_id, tag_id) prevents duplicates.
+   Relationships:
+   - One card can have many tags (via card_tags).
+   - One tag can belong to many cards (via card_tags).
+   - All rows are owned by a user (owner_id).
+
+Q13. What is the card_tags table for? Why not store tags in the cards table?
+------------------------------------------------------------------------------
+A: card_tags is a many-to-many join table. A card can have multiple tags, and a
+   tag can be applied to multiple cards simultaneously. Storing tags in an array
+   column on cards would make it impossible to efficiently query "all cards with
+   tag X" without scanning every row and array. With a join table, a simple
+   indexed SELECT on card_tags.tag_id finds all matching cards instantly.
+   It also allows tags to have their own metadata (name, color, owner_id) stored
+   once in the tags table rather than duplicated on every card.
+
+Q14. What does subscribeToCards do? How does real-time subscription work?
+--------------------------------------------------------------------------
+A: subscribeToCards(ownerId, onChange) creates a Supabase Realtime channel that
+   listens for INSERT, UPDATE, and DELETE events on the `cards` table filtered
+   by `owner_id = ownerId`. Under the hood, Supabase opens a WebSocket
+   connection to the Realtime server. PostgreSQL's logical replication WAL
+   (Write-Ahead Log) streams change events to Supabase, which forwards them
+   over the WebSocket. When the `onChange` callback fires, the app can
+   re-fetch or patch the local card list. The function returns a cleanup
+   function that calls supabase.removeChannel() to close the WebSocket when
+   the component unmounts.
+
+Q15. What is ensureTagsForCard doing, and why does it use upsert?
+------------------------------------------------------------------
+A: ensureTagsForCard(cardId, ownerId, tagNames) loops over an array of tag name
+   strings. For each name it:
+   1. Looks up the tag in the tags table (maybeSingle so it doesn't throw if
+      not found).
+   2. If not found, inserts a new tag row.
+   3. Inserts a row into card_tags linking the card and tag, using upsert with
+      onConflict: 'card_id,tag_id'.
+   upsert is used because the same tag might already be linked to the card (e.g.
+   if the card is being re-tagged). INSERT would throw a unique constraint
+   violation, while upsert silently ignores the conflict and does nothing,
+   making the operation idempotent.
+
+Q16. What happens when a file is deleted? Why is storage cleanup separate?
+---------------------------------------------------------------------------
+A: deleteCard(cardId, storagePath) does two things:
+   1. If storagePath is provided, calls supabase.storage.from('user-files')
+      .remove([storagePath]) to delete the actual file blob from object storage.
+   2. Calls supabase.from('cards').delete().eq('id', cardId) to remove the
+      metadata row from the database.
+   Storage and database are separate systems; deleting a database row does NOT
+   automatically delete the associated file in Supabase Storage. If only the
+   row were deleted, the file would remain in the bucket indefinitely, wasting
+   storage quota. The delete is attempted inside a try/catch so a storage
+   failure does not block the database cleanup.
+
+Q17. What does ON DELETE CASCADE mean in the foreign key definitions?
+----------------------------------------------------------------------
+A: ON DELETE CASCADE is a foreign key referential action. When the referenced
+   (parent) row is deleted, all rows in the child table that reference it are
+   automatically deleted as well. In this schema:
+   - Deleting a user from auth.users cascades to delete all their cards, tags,
+     and folders.
+   - Deleting a folder cascades to delete its sub-folders (self-referencing FK
+     on folders.parent_id).
+   This prevents orphan rows (child rows pointing to non-existent parents) and
+   keeps the database clean without requiring manual cleanup code.
+
+Q18. How are Supabase storage policies configured to ensure users access only
+     their own files?
+---------------------------------------------------------------------------
+A: Storage RLS policies check two things:
+   1. bucket_id = 'user-files' — ensures the policy applies only to the
+      correct bucket.
+   2. (storage.foldername(name))[1] = auth.uid()::text — the file path is
+      structured as <user_uuid>/cards/<filename>. storage.foldername() returns
+      an array of path segments; index [1] is the first segment (the UUID).
+      Comparing it to auth.uid()::text ensures the authenticated user can only
+      access files under their own UUID prefix. A separate policy exists for
+      INSERT, SELECT, UPDATE, and DELETE so each operation is independently
+      controlled.
+
+Q19. Why is maybeSingle() used instead of single() in the tag lookup query?
+----------------------------------------------------------------------------
+A: single() throws a PostgREST error if the query returns zero rows or more
+   than one row. In the tag lookup inside ensureTagsForCard, it is expected
+   that the tag might not exist yet (zero rows). Using single() would throw
+   an exception for the "not found" case, forcing awkward error-checking.
+   maybeSingle() returns null (data: null, error: null) when no row is found,
+   which is the idiomatic way to check "does this row exist?" without
+   exception handling.
+
+================================================================================
+                   SECTION 4: AUTHENTICATION & SECURITY
+================================================================================
+
+Q20. How is the 6-digit OTP email verification implemented?
+------------------------------------------------------------
+A: When a user signs up, Supabase sends a confirmation email containing a
+   6-digit numeric code (configured in the Supabase dashboard by changing the
+   email template to use {{ .Token }} instead of the magic link).
+   The app shows the OtpField input. On submission, it calls:
+       sb.auth.verifyOtp({ email, token: otp, type: 'signup' })
+   Supabase verifies the token server-side. If correct, it marks the email as
+   confirmed and returns a session, logging the user in automatically. The
+   onAuthStateChange listener in App.jsx picks up the new session and renders
+   MindApp.
+
+Q21. Walk through the complete password reset flow.
+----------------------------------------------------
+A: 1. User clicks "Forgot password?" → mode switches to 'forgot'.
+   2. User enters email and submits → handleForgotSubmit calls
+      sb.auth.resetPasswordForEmail(email). Supabase emails a 6-digit reset code.
+      Mode switches to 'reset-code'.
+   3. User enters the code → handleResetCodeSubmit sets forceAuth=true (to
+      prevent the app jumping to MindApp when a recovery session is created),
+      then calls sb.auth.verifyOtp({ email, token: otp, type: 'recovery' }).
+      On success, mode switches to 'reset-password'.
+   4. User enters and confirms new password → handleNewPasswordSubmit calls
+      sb.auth.updateUser({ password: newPw }), then sb.auth.signOut(), then
+      sets forceAuth=false and schedules a redirect to 'login' after 2.5s.
+
+Q22. Why is the Supabase anon key safe to expose on the frontend?
+------------------------------------------------------------------
+A: The anon (anonymous) key is a JWT with the 'anon' role. It only has the
+   permissions explicitly granted to the 'anon' role in Supabase's PostgreSQL
+   database. By default (and in this project), the anon role has no SELECT,
+   INSERT, UPDATE, or DELETE permissions on user tables — RLS policies only
+   allow access to authenticated users via auth.uid(). The anon key cannot be
+   used to read another user's data. It is intentionally designed to be
+   public — it is equivalent to an API identifier, not a secret credential.
+
+Q23. What would happen if RLS was disabled?
+--------------------------------------------
+A: Without RLS, any authenticated user could query any table and retrieve all
+   rows regardless of owner_id. A malicious user could craft a direct HTTP
+   request to the Supabase REST API using their own valid JWT (anon key +
+   auth token) and read, modify, or delete every other user's cards, tags,
+   and files. The entire data isolation guarantee would be lost.
+
+Q24. How is owner_id used to scope data access?
+------------------------------------------------
+A: Every card, tag, and folder row stores the owner_id of the user who created
+   it (set to the auth.uid() at insert time). RLS policies use USING (owner_id =
+   auth.uid()) so that Supabase automatically appends a WHERE owner_id = <uid>
+   filter to every query. The application code also passes the user's id as a
+   filter in some queries (e.g., listTags(ownerId)) for clarity, but the
+   database-level enforcement is independent of application logic.
+
+================================================================================
+                        SECTION 5: AI INTEGRATION
+================================================================================
+
+Q25. Explain the AI tagging pipeline — which providers are used and in what order?
+-----------------------------------------------------------------------------------
+A: autoTagContent(content, type, meta) follows this waterfall:
+   1. Groq API (llama3-8b-8192) — tried first if VITE_GROQ_API_KEY is set in
+      the environment. Fast and free-tier available.
+   2. If Groq returns null or fails to parse, the local rule-based tagger
+      generateBasicTags() is used as a final fallback.
+   callClaudeForTags() is a separate function for direct Claude API calls but
+   is noted in comments as not usable from the browser due to CORS restrictions.
+
+Q26. What is the Groq API used for? What model is called?
+---------------------------------------------------------
+A: Groq is used to generate tags, a concise title, and a short summary for a
+   saved card. The model called is 'llama3-8b-8192' — Meta's LLaMA 3 8-billion
+   parameter model hosted on Groq's LPU (Language Processing Unit) inference
+   hardware, which is extremely fast. The request uses response_format:
+   { type: 'json_object' } to force structured JSON output, making it easy to
+   parse programmatically.
+
+Q27. Why is Claude AI not actually usable directly from the browser in production?
+-----------------------------------------------------------------------------------
+A: The Anthropic API does not include CORS (Cross-Origin Resource Sharing)
+   headers that allow requests from browser origins. Browsers enforce the
+   Same-Origin Policy and will block fetch() calls to api.anthropic.com from
+   a web page. Additionally, embedding the Anthropic API key in frontend code
+   would expose a paid secret credential to any user who opens DevTools. The
+   correct pattern is to proxy such calls through a backend server or serverless
+   function that holds the key securely.
+
+Q28. What is the local fallback tagger (generateBasicTags) and when is triggered?
+-----------------------------------------------------------------------------------
+A: generateBasicTags(content, type, meta) is a pure JavaScript function that
+   generates tags without any API call. It always adds the card type as a tag.
+   For links, it looks up the domain in a hardcoded DOMAIN_TAGS map (e.g.
+   'github.com' → ['code', 'github']) and adds 'bookmark'. It uses the title
+   from metadata if available. It is triggered when:
+   - VITE_GROQ_API_KEY is not set, or
+   - The Groq API call throws an error or returns unparseable JSON.
+
+Q29. How does autoTagContent decide what tags, title, and summary to generate?
+-------------------------------------------------------------------------------
+A: For link-type cards, the prompt includes the URL, title, description, and
+   site name from the fetched metadata. For other types, it includes up to 400
+   characters of the content. The AI is asked to respond in JSON format:
+   {"tags": [...], "title": "...", "summary": "..."}
+   The response is cleaned of any markdown code fences, parsed with JSON.parse,
+   and validated for structure. Tags are limited to a maximum of 6 items.
+
+Q30. What is the detectType function doing? What content types does it recognise?
+----------------------------------------------------------------------------------
+A: detectType(url, d) inspects the URL pattern and optional metadata to infer
+   the content category. It returns one of: 'image', 'pdf', 'video', 'code',
+   'product', 'tweet', 'article', or 'link'. Detection is done by:
+   - Checking file extension patterns (jpg, pdf, mp4, etc.) in the URL.
+   - Checking domain patterns (youtube.com → video, github.com → code,
+     twitter.com/x.com → tweet, amazon/etsy → product).
+   - Checking if the description is long (>200 chars) → classified as 'article'.
+   - Defaulting to 'link'.
+
+================================================================================
+               SECTION 6: LINK PREVIEWS & FILE HANDLING
+================================================================================
+
+Q31. Explain the strategies used in fetchLinkMeta to fetch metadata for a URL.
+--------------------------------------------------------------------------------
+A: fetchLinkMeta(url) tries four strategies in order:
+   0a. YouTube oEmbed API — CORS-friendly, returns title, author, thumbnail.
+   0b. Vimeo oEmbed API — same approach for Vimeo videos.
+   1.  Microlink API (api.microlink.io) — a paid/freemium service that can
+       scrape any URL server-side and return OG metadata, a screenshot, logo, etc.
+   2.  allorigins.win proxy — fetches the raw HTML of any URL through a CORS
+       proxy, then parses og:title, og:description, og:image using DOMParser.
+   3.  Bare minimum — uses just the hostname as the title and a Google favicon
+       service URL. Used if everything else fails.
+
+Q32. Why are YouTube and Vimeo handled separately?
+---------------------------------------------------
+A: Their oEmbed APIs are publicly accessible without authentication and respond
+   with CORS headers, meaning they can be called directly from the browser.
+   Attempting to fetch the actual youtube.com or vimeo.com page via a CORS
+   proxy would be blocked or return incomplete HTML. The oEmbed endpoints
+   reliably return structured JSON (title, author, thumbnail) with a single
+   CORS-friendly request, making them the most accurate and fastest option for
+   video URLs.
+
+Q33. What is allorigins.win used for, and why is it needed?
+------------------------------------------------------------
+A: allorigins.win is a free CORS proxy service. When a browser tries to fetch
+   an arbitrary webpage (e.g. a news article), the target server usually does
+   not include Access-Control-Allow-Origin headers, so the browser blocks the
+   response. allorigins.win fetches the page server-side and returns its
+   contents wrapped in a JSON response with permissive CORS headers, allowing
+   the browser to read the HTML. The app then parses OG meta tags from the
+   HTML using DOMParser.
+
+Q34. How is a PDF file previewed? Which library is dynamically loaded?
+-----------------------------------------------------------------------
+A: renderPdfPage(file) dynamically loads the PDF.js library from a CDN
+   (cdnjs.cloudflare.com) by injecting a <script> tag into the document head.
+   It also sets the worker source for PDF.js. Once loaded:
+   1. The file is read as an ArrayBuffer.
+   2. pdfjsLib.getDocument({ data: buf }) parses the PDF.
+   3. The first page is retrieved with pdf.getPage(1).
+   4. A viewport is created at scale 1.6.
+   5. An off-screen <canvas> element is sized to the viewport and the page is
+      rendered onto it using page.render().
+   6. canvas.toDataURL('image/png') returns a base64 data URL used as the
+      thumbnail/preview image.
+
+Q35. What is a signed URL and why is it used instead of a public URL?
+----------------------------------------------------------------------
+A: A signed URL is a time-limited, pre-authorized URL generated by Supabase
+   Storage. It embeds a cryptographic signature and expiry timestamp in the
+   query string. Anyone with the URL can download the file during the validity
+   window (e.g. 1 hour or 24 hours) without needing to be authenticated.
+   It is used instead of a public URL because the 'user-files' bucket is
+   configured as private (public: false). Public URLs would require the bucket
+   to be fully open, making any file accessible to anyone who guesses the path.
+   Signed URLs allow time-bounded, controlled sharing while keeping the bucket
+   private.
+
+Q36. How does uploadFileAsCard work end-to-end?
+------------------------------------------------
+A: 1. ensureBucket() checks if the 'user-files' bucket exists; creates it if not.
+   2. A unique storage path is constructed: `<ownerId>/cards/<timestamp>_<name>`.
+   3. The file is uploaded to Supabase Storage using supabase.storage.upload().
+   4. If the file is an image or PDF, a signed URL (valid 24h) is generated
+      for use as the thumbnail.
+   5. createCard() inserts a row in the cards table with type, title (file name),
+      storage_path, mime_type, size, and thumbnail_url.
+   6. If tagNames are provided, ensureTagsForCard() links them to the new card.
+   7. The created card object is returned to the caller.
+
+================================================================================
+                      SECTION 7: BUILD & DEPLOYMENT
+================================================================================
+
+Q37. What is Vite and how does it differ from webpack?
+-------------------------------------------------------
+A: Vite is a modern frontend build tool that uses native ES modules for
+   development and Rollup for production builds. Key differences from webpack:
+   - Dev server: Vite serves files as native ESM — the browser imports modules
+     on demand. Webpack pre-bundles everything, causing slow startup on large
+     projects.
+   - HMR speed: Vite's HMR only invalidates the changed module's scope.
+     Webpack rebuilds larger dependency chains.
+   - Configuration: Vite config is minimal (vite.config.js is only 6 lines in
+     this project). Webpack requires extensive boilerplate.
+   - Production: both produce optimised bundles, but Rollup (Vite's bundler)
+     produces smaller output with better tree-shaking.
+
+Q38. Why is the .env file used for credentials? What prefix must Vite env vars have?
+-------------------------------------------------------------------------------------
+A: Environment variables keep secrets (API keys, database URLs) out of source
+   code and version control. The .env file is listed in .gitignore so it is
+   never committed. In Vite, only variables prefixed with VITE_ are exposed
+   to client-side code via import.meta.env. Variables without this prefix
+   remain server-only and are inaccessible to the browser bundle, preventing
+   accidental secret exposure. Example:
+       VITE_SUPABASE_URL=https://xxx.supabase.co   ← exposed to browser
+       SECRET_KEY=abc123                            ← NOT exposed
+
+Q39. What is the purpose of vercel.json in this project?
+---------------------------------------------------------
+A: vercel.json contains a single rewrite rule:
+       { "source": "/(.*)", "destination": "/" }
+   This tells Vercel to redirect all URL paths to index.html. It is required
+   for single-page applications (SPAs) because Vivyn uses client-side routing.
+   When a user navigates directly to a deep URL (e.g. /starred) or refreshes
+   the page, the server would normally return a 404 since there is no physical
+   file at that path. The rewrite rule sends all requests to index.html, letting
+   React Router (or equivalent) handle the routing on the client side.
+
+Q40. How would you deploy this application to production?
+----------------------------------------------------------
+A: 1. Create a Supabase project and run the SQL schema from the README.
+   2. Configure email templates in Supabase Dashboard for OTP verification.
+   3. Create the 'user-files' storage bucket and apply the storage RLS policies.
+   4. Connect the GitHub repository to Vercel.
+   5. In Vercel project settings, add environment variables:
+          VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (and optionally
+          VITE_GROQ_API_KEY).
+   6. Vercel automatically runs `npm run build` (which runs vite build) and
+      deploys the dist/ output to its CDN.
+   7. vercel.json ensures SPA routing works correctly.
+
+================================================================================
+                      SECTION 8: DESIGN / BEST PRACTICES
+================================================================================
+
+Q41. What is the requireSupabase() helper and why is it useful?
+---------------------------------------------------------------
+A: requireSupabase() is a private function in supabaseService.js that checks
+   if the supabase client was successfully initialised. If not, it throws a
+   descriptive error: "Supabase is not configured. Set your .env credentials."
+   Every exported service function calls this at the top, ensuring that a
+   missing configuration produces a clear, actionable error rather than a
+   confusing "Cannot read properties of null" crash deep in the call stack.
+   It centralises the configuration guard in one place.
+
+Q42. Why does the app check isConfigured() before any auth operations?
+-----------------------------------------------------------------------
+A: isConfigured() returns true only if the Supabase client was initialised
+   (i.e. VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set and valid).
+   If the .env file is missing or empty, the app renders a friendly setup
+   card instead of crashing. This improves developer experience when the
+   project is first cloned — the app is usable (in setup mode) even before
+   credentials are configured, rather than showing a blank screen or errors.
+
+Q43. What is the bucketReady flag optimising?
+----------------------------------------------
+A: bucketReady is a module-level boolean in supabaseService.js, initially
+   false. The ensureBucket() function checks (via getBucket) whether the
+   'user-files' storage bucket exists. Once confirmed, it sets bucketReady=true.
+   On every subsequent file upload, ensureBucket() returns immediately without
+   making any network request. This is a simple memoisation / one-time
+   initialisation pattern that avoids a redundant API call (getBucket or
+   createBucket) on every upload during the same session.
+
+Q44. How does refreshImageUrls work and when is it needed?
+-----------------------------------------------------------
+A: refreshImageUrls(cards) iterates over all cards and, for any image card that
+   has a storage_path but no thumbnail_url, fetches a fresh signed URL (valid
+   24 hours) and returns an updated card object. Signed URLs expire after their
+   validity period. If a card was saved yesterday with a 1-hour signed URL, the
+   thumbnail would be broken today. Calling refreshImageUrls after loading cards
+   ensures expired URLs are regenerated. It is typically called after listCards()
+   to make sure all image thumbnails display correctly.
+
+Q45. What does import.meta.env mean in a Vite project?
+-------------------------------------------------------
+A: import.meta is a special object available in ES module contexts, providing
+   module-specific metadata. Vite extends it with an env property that exposes
+   environment variables from .env files at build time. Variables are statically
+   replaced by Vite during the build (similar to webpack's DefinePlugin), so
+   only variables that start with VITE_ are included in the client bundle.
+   For example:
+       import.meta.env.VITE_SUPABASE_URL  → replaced with the actual URL string
+       import.meta.env.MODE               → 'development' or 'production'
+       import.meta.env.DEV                → true in dev, false in prod
+   These are not runtime environment variables; they are inlined at build time.
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================
