@@ -1,12 +1,9 @@
-// ─── ANIMATION WRAPPERS ──────────────────────────────────────────────────────
-// Framer Motion + GSAP + React Three Fiber components
+
 import { useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { Canvas, useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
-
-// ─── FRAMER MOTION VARIANTS ──────────────────────────────────────────────────
+import * as THREE from 'three';
 
 export const cardVariants = {
   hidden: { opacity: 0, y: 30, scale: 0.95 },
@@ -62,9 +59,7 @@ export const popupVariants = {
 export const emptyStateVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' } },
-};
-
-// ─── GSAP SIDEBAR LOGO HOOK ──────────────────────────────────────────────────
+};
 
 export function useGsapLogoEntrance(ref) {
   useEffect(() => {
@@ -85,9 +80,7 @@ export function useGsapSidebarIcons(ref) {
       { opacity: 1, x: 0, scale: 1, duration: 0.5, stagger: 0.08, ease: 'back.out(1.7)', delay: 0.6 }
     );
   }, [ref]);
-}
-
-// ─── REACT THREE FIBER — AMBIENT PARTICLES ───────────────────────────────────
+}
 
 function ParticleField() {
   const meshRef = useRef();
@@ -136,7 +129,5 @@ export function AmbientParticles() {
       </Canvas>
     </div>
   );
-}
-
-// Re-export motion and AnimatePresence for convenience
+}
 export { motion, AnimatePresence };

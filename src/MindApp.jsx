@@ -5,16 +5,15 @@ import { formatBytes } from './mockData';
 import {
   Search, Star, Trash2, Link2, FileText, X, Check, CloudUpload,
   Plus, Moon, Sun, Sparkles, Grid, Settings, ExternalLink,
-  Globe, Film, Code, ShoppingBag, FileImage, Loader, MessageCircle, Home, RotateCcw
+  Globe, Film, Code, ShoppingBag, FileImage, Loader, MessageCircle, Home, RotateCcw,
+  Pin, BookOpen, Hash, Image as ImageIcon, StickyNote, Quote
 } from 'lucide-react';
 import {
   motion, AnimatePresence,
   cardVariants, sidebarIconVariants, modalOverlayVariants, panelVariants,
   sheetVariants, toastVariants, dragOverlayVariants, popupVariants, emptyStateVariants,
   useGsapSidebarIcons, AmbientParticles
-} from './animations';
-
-// ─── TYPE ICON MAP ────────────────────────────────────────────────────────────
+} from './animations';
 const TYPE_ICONS = {
   link: <Globe size={11} />,
   article: <FileText size={11} />,
@@ -24,9 +23,7 @@ const TYPE_ICONS = {
   tweet: <MessageCircle size={11} />,
   image: <FileImage size={11} />,
   pdf: <FileText size={11} />,
-};
-
-// ─── LINK PREVIEW CARD ───────────────────────────────────────────────────────
+};
 function LinkPreviewCard({ meta, isLoading }) {
   const [imgError, setImgError] = useState(false);
   const thumb = getUrlThumbnail(meta);
@@ -72,9 +69,7 @@ function LinkPreviewCard({ meta, isLoading }) {
       </div>
     </div>
   );
-}
-
-// ─── PDF PAGE CANVAS — renders first page of a PDF from a URL ────────────────
+}
 function PdfPageCanvas({ url, height = 260 }) {
   const canvasRef = useRef(null);
   const [error, setError] = useState(false);
@@ -85,8 +80,7 @@ function PdfPageCanvas({ url, height = 260 }) {
     let cancelled = false;
 
     async function render() {
-      try {
-        // Load PDF.js from CDN if not already loaded
+      try {
         if (!window.pdfjsLib) {
           await new Promise((res, rej) => {
             const s = document.createElement('script');
@@ -148,31 +142,21 @@ function PdfPageCanvas({ url, height = 260 }) {
       <div className="card-pdf-badge">PDF</div>
     </div>
   );
-}
-
-// ─── CARD THUMBNAIL ───────────────────────────────────────────────────────────
+}
 function CardThumbnail({ card }) {
   const [imgError, setImgError] = useState(false);
-  const [screenshotError, setScreenshotError] = useState(false);
-
-  // ── PDF: use PdfPageCanvas to render first page live from storage URL ──
-  if (card.mime_type === 'application/pdf' || card.type === 'pdf') {
-    // Use storage_url (signed URL of the PDF file) for rendering
+  const [screenshotError, setScreenshotError] = useState(false);
+  if (card.mime_type === 'application/pdf' || card.type === 'pdf') {
     const pdfUrl = card.storage_url || card.thumbnail_url || null;
     return <PdfPageCanvas url={pdfUrl} height={220} />;
-  }
-
-  // ── Image ──
+  }
   if ((card.type === 'image' || card.mime_type?.startsWith('image/')) && (card.thumbnail_url || card.storage_url)) {
     const src = card.thumbnail_url || card.storage_url;
     if (!imgError) {
       return <img className="mind-card-img" src={src} alt={card.title || ''} loading="lazy" style={{ maxHeight: 260, objectFit: 'cover', objectPosition: 'top' }} onError={() => setImgError(true)} />;
     }
-  }
-
-  // ── Link thumbnails ──
-  if (card.type === 'link') {
-    // YouTube: direct thumbnail from video ID
+  }
+  if (card.type === 'link') {
     const ytMatch = (card.content || '').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     if (ytMatch) {
       return (
@@ -185,14 +169,10 @@ function CardThumbnail({ card }) {
           </div>
         </div>
       );
-    }
-
-    // OG / screenshot image from metadata
+    }
     if (card.thumbnail_url && !imgError) {
       return <img className="mind-card-img" src={card.thumbnail_url} alt="" loading="lazy" style={{ maxHeight: 220, objectFit: 'cover', objectPosition: 'top' }} onError={() => setImgError(true)} />;
-    }
-
-    // Microlink screenshot fallback
+    }
     if (card.content && !imgError && !screenshotError) {
       return (
         <img
@@ -208,13 +188,9 @@ function CardThumbnail({ card }) {
   }
 
   return null;
-}
-
-// ─── DETAIL PREVIEW ───────────────────────────────────────────────────────────
+}
 function DetailPreview({ card, previewUrl }) {
-  const [imgError, setImgError] = useState(false);
-
-  // Full-res image
+  const [imgError, setImgError] = useState(false);
   if (card.mime_type?.startsWith('image/') || card.type === 'image') {
     const src = previewUrl || card.thumbnail_url;
     if (src && !imgError) {
@@ -227,9 +203,7 @@ function DetailPreview({ card, previewUrl }) {
         />
       );
     }
-  }
-
-  // PDF: full iframe viewer — use previewUrl (freshly fetched signed URL) or card.storage_url
+  }
   if (card.mime_type === 'application/pdf' || card.type === 'pdf') {
     const pdfSrc = previewUrl || card.storage_url;
     if (pdfSrc) {
@@ -242,17 +216,14 @@ function DetailPreview({ card, previewUrl }) {
           />
         </div>
       );
-    }
-    // Fallback: show a placeholder if no URL available
+    }
     return (
       <div style={{ width: '100%', height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, background: 'var(--bg-main)', borderRadius: 'var(--radius-card)', marginBottom: 24, border: '1px solid var(--border-light)' }}>
         <FileText size={48} style={{ color: 'var(--text-secondary)', opacity: 0.3 }} />
         <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>PDF preview loading...</div>
       </div>
     );
-  }
-
-  // Link with OG image / screenshot
+  }
   if (card.type === 'link') {
     const thumb = card.thumbnail_url;
     if (thumb && !imgError) {
@@ -264,8 +235,7 @@ function DetailPreview({ card, previewUrl }) {
           onError={() => setImgError(true)}
         />
       );
-    }
-    // Fallback: live embed via microlink
+    }
     if (card.content) {
       return (
         <div style={{ width: '100%', borderRadius: 'var(--radius-card)', overflow: 'hidden', marginBottom: 24, border: '1px solid var(--border-light)', background: 'var(--bg-main)' }}>
@@ -282,9 +252,7 @@ function DetailPreview({ card, previewUrl }) {
   }
 
   return null;
-}
-
-// ─── INLINE ADD CARD (isolated state, no conflicts with modal) ────────────────
+}
 function InlineAddCard({ onSubmit, loading }) {
   const [val, setVal] = useState('');
   const handleSave = () => {
@@ -318,9 +286,7 @@ function InlineAddCard({ onSubmit, loading }) {
       </div>
     </div>
   );
-}
-
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+}
 export default function MindApp({ user, onSignOut }) {
   const [cards, setCards] = useState([]);
   const [search, setSearch] = useState('');
@@ -328,9 +294,7 @@ export default function MindApp({ user, onSignOut }) {
   const [addContent, setAddContent] = useState('');
   const [addModal, setAddModal] = useState(false);
   const [addType, setAddType] = useState('note');
-  const [addTitle, setAddTitle] = useState('');
-
-  // Live link preview in add modal
+  const [addTitle, setAddTitle] = useState('');
   const [linkPreviewMeta, setLinkPreviewMeta] = useState(null);
   const [linkPreviewLoading, setLinkPreviewLoading] = useState(false);
   const linkPreviewTimer = useRef(null);
@@ -347,13 +311,13 @@ export default function MindApp({ user, onSignOut }) {
   const [viewTrash, setViewTrash] = useState(false);
   const [viewStarred, setViewStarred] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [libraryFilter, setLibraryFilter] = useState('all');
+  const [showLibrary, setShowLibrary] = useState(false);
 
   const fRef = useRef(null);
   const dc = useRef(0);
 
-  const iconsRef = useRef(null);
-
-  // GSAP entrance animations
+  const iconsRef = useRef(null);
   useGsapSidebarIcons(iconsRef);
 
   const toast = useCallback((text, type = 'info') => {
@@ -367,18 +331,14 @@ export default function MindApp({ user, onSignOut }) {
       const opts = { trashed: viewTrash };
       if (search) opts.search = search;
       if (viewStarred) opts.starred = true;
-      let c = await svc.listCards(opts);
-
-      // Resolve signed storage URLs in parallel for all cards with a storage_path
+      let c = await svc.listCards(opts);
       const resolved = await Promise.all(c.map(async (card) => {
         if (!card.storage_path) return card;
-        try {
-          // Get a fresh signed URL for the actual file (used for PDF viewer + image fallback)
+        try {
           const signedUrl = await svc.getSignedUrl(card.storage_path, 86400);
           return {
             ...card,
-            storage_url: signedUrl,
-            // For images: use as thumbnail if none set; for PDFs: we render via PdfPageCanvas using storage_url
+            storage_url: signedUrl,
             thumbnail_url: card.thumbnail_url || (card.mime_type?.startsWith('image/') ? signedUrl : card.thumbnail_url),
           };
         } catch {
@@ -396,9 +356,7 @@ export default function MindApp({ user, onSignOut }) {
     if (!user) return;
     const unsub = svc.subscribeToCards(user.id, () => loadData());
     return unsub;
-  }, [user, loadData]);
-
-  // ── Auto-repair: fix link cards with bad titles (hostname/raw URL) ──
+  }, [user, loadData]);
   const repairRan = useRef(false);
   useEffect(() => {
     if (repairRan.current || cards.length === 0) return;
@@ -406,10 +364,8 @@ export default function MindApp({ user, onSignOut }) {
 
     const isBadTitle = (title, content) => {
       const t = (title || '').trim().toLowerCase();
-      if (!t) return true;
-      // Title is the raw URL itself
-      if (t.startsWith('http://') || t.startsWith('https://')) return true;
-      // Title is just a hostname
+      if (!t) return true;
+      if (t.startsWith('http://') || t.startsWith('https://')) return true;
       try {
         const hostname = new URL(content.startsWith('http') ? content : 'https://' + content).hostname.replace('www.', '').toLowerCase();
         if (t === hostname || t === 'www.' + hostname) return true;
@@ -428,8 +384,7 @@ export default function MindApp({ user, onSignOut }) {
       let anyFixed = false;
       for (const card of needsRepair) {
         try {
-          const meta = await fetchLinkMeta(card.content);
-          // Only update if the new title is actually useful (not another hostname)
+          const meta = await fetchLinkMeta(card.content);
           if (meta.title && !isBadTitle(meta.title, card.content)) {
             const updates = { title: meta.title };
             if (meta.image && !card.thumbnail_url) updates.thumbnail_url = meta.image;
@@ -443,13 +398,10 @@ export default function MindApp({ user, onSignOut }) {
       }
       if (anyFixed) loadData();
     })();
-  }, [cards]);
-
-  // ── Live link preview debounce ──
+  }, [cards]);
   useEffect(() => {
     if (addType !== 'link') { setLinkPreviewMeta(null); return; }
-    const val = addContent.trim();
-    // FIX: accept https://, http://, www., or bare domain like "github.com/..."
+    const val = addContent.trim();
     const looksLikeUrl = /^(https?:\/\/)/.test(val) || /^www\./i.test(val) || /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/.test(val);
     if (!val || !looksLikeUrl) { setLinkPreviewMeta(null); return; }
 
@@ -464,9 +416,7 @@ export default function MindApp({ user, onSignOut }) {
     }, 800);
 
     return () => clearTimeout(linkPreviewTimer.current);
-  }, [addContent, addType]);
-
-  // ── File upload ──
+  }, [addContent, addType]);
   const handleUpload = async (fileList) => {
     if (!fileList?.length) return;
     toast(`Uploading ${fileList.length} file${fileList.length > 1 ? 's' : ''}...`);
@@ -480,16 +430,13 @@ export default function MindApp({ user, onSignOut }) {
       }
     }
     loadData();
-  };
-
-  // ── Submit card ──
+  };
   const submitCard = async (rawContent, overrideType, overrideTitle) => {
     const trimmed = rawContent.trim();
     if (!trimmed) return;
     setLoading(true);
 
-    try {
-      // Detect URLs loosely (http/https OR www. prefix OR bare domain)
+    try {
       const isUrl = /^(https?:\/\/)[^ "]+$/.test(trimmed)
         || /^www\.[^ "]+/.test(trimmed)
         || /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^ "]*/.test(trimmed);
@@ -501,18 +448,14 @@ export default function MindApp({ user, onSignOut }) {
       if (isUrl || type === 'link') {
         toast('Fetching page info...', 'info');
         try { meta = await fetchLinkMeta(trimmed); } catch {}
-      }
-
-      // AI tagging via Groq (if key set) or Claude API fallback
-      toast('✦ AI tagging...', 'info');
+      }
+      toast('✦ Generating AI summary...', 'info');
       let aiResponse = { tags: [], title: '', summary: '' };
       try {
         aiResponse = await autoTagContent(trimmed, type, meta);
       } catch (e) {
         console.warn('AI tagging error:', e);
-      }
-
-      // Determine final title: explicit > AI > meta > fallback
+      }
       const finalTitle = overrideTitle?.trim()
         || aiResponse.title
         || meta.title
@@ -551,8 +494,7 @@ export default function MindApp({ user, onSignOut }) {
   const handleTrash = async (card, e) => {
     e?.stopPropagation();
     
-    if (card.trashed) {
-      // Already in trash — permanently delete
+    if (card.trashed) {
       try {
         await svc.deleteCard(card.id, card.storage_path || null);
         toast('Permanently deleted ✓', 'success');
@@ -562,8 +504,7 @@ export default function MindApp({ user, onSignOut }) {
         toast('Failed to delete', 'error');
         console.error(err);
       }
-    } else {
-      // Move to trash first
+    } else {
       try {
         await svc.trashCard(card.id);
         toast('Moved to trash ✓', 'success');
@@ -591,7 +532,7 @@ export default function MindApp({ user, onSignOut }) {
 
   const handlePreview = async (card) => {
     setPreviewCard(card);
-    setSideSpill(card.annotation || '');
+    setSideSpill(card.metadata?.annotation || '');
     setPreviewUrl('');
     if (card.storage_path) {
       try {
@@ -603,7 +544,13 @@ export default function MindApp({ user, onSignOut }) {
 
   const saveSideSpill = async () => {
     if (!previewCard) return;
-    try { await svc.updateCard(previewCard.id, { annotation: sideSpill }); } catch {}
+    try {
+      const updatedMeta = { ...(previewCard.metadata || {}), annotation: sideSpill };
+      await svc.updateCard(previewCard.id, { metadata: updatedMeta });
+      setPreviewCard(prev => prev ? { ...prev, metadata: updatedMeta } : prev);
+    } catch (e) {
+      console.error('Failed to save note:', e);
+    }
     loadData();
   };
 
@@ -652,17 +599,46 @@ export default function MindApp({ user, onSignOut }) {
         onDrop={handleDrop}
       >
         <div className="main-wrapper">
-
-          {/* SIDEBAR */}
           <nav className="thin-sidebar">
             <div className="sidebar-icons" ref={iconsRef}>
-              <motion.button className={`side-icon ${!viewStarred && !viewTrash && !search && !showSearch && !showSettings ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setViewStarred(false); setViewTrash(false); setSearch(''); setShowSearch(false); setShowSettings(false); }} title="Home"><Home size={22} /></motion.button>
+              <motion.button className={`side-icon ${!viewStarred && !viewTrash && !search && !showSearch && !showSettings && !showLibrary && libraryFilter === 'all' ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setViewStarred(false); setViewTrash(false); setSearch(''); setShowSearch(false); setShowSettings(false); setShowLibrary(false); setLibraryFilter('all'); }} title="Home"><Home size={22} /></motion.button>
               <motion.button className={`side-icon ${showSearch ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setShowSearch(!showSearch); setShowSettings(false); }} title="Search"><Search size={22} /></motion.button>
               <motion.button className="side-icon" variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => setAddModal(true)} title="Add new"><Plus size={22} /></motion.button>
               <motion.button className={`side-icon ${viewStarred ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setViewStarred(!viewStarred); setViewTrash(false); setShowSettings(false); setShowSearch(false); }} title="Starred">
                 <Star size={22} fill={viewStarred ? 'currentColor' : 'none'} />
               </motion.button>
-              <motion.button className={`side-icon ${showSettings ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setShowSettings(!showSettings); setShowSearch(false); }} title="Settings"><Settings size={22} /></motion.button>
+              <motion.button className={`side-icon ${showLibrary ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setShowLibrary(!showLibrary); setShowSettings(false); setShowSearch(false); }} title="Library"><BookOpen size={22} /></motion.button>
+              <motion.button className={`side-icon ${showSettings ? 'active' : ''}`} variants={sidebarIconVariants} initial="rest" whileHover="hover" whileTap="tap" onClick={() => { setShowSettings(!showSettings); setShowSearch(false); setShowLibrary(false); }} title="Settings"><Settings size={22} /></motion.button>
+
+              <AnimatePresence>
+                {showLibrary && (
+                  <motion.div className="settings-popup" style={{ width: 190 }} variants={popupVariants} initial="hidden" animate="visible" exit="exit">
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1, padding: '6px 16px 4px' }}>Library</div>
+                    {[
+                      { key: 'all', label: 'All Items', icon: <Grid size={14} /> },
+                      { key: 'link', label: 'Links', icon: <Globe size={14} /> },
+                      { key: 'note', label: 'Notes', icon: <StickyNote size={14} /> },
+                      { key: 'image', label: 'Images', icon: <ImageIcon size={14} /> },
+                      { key: 'quote', label: 'Quotes', icon: <Quote size={14} /> },
+                      { key: 'video', label: 'Videos', icon: <Film size={14} /> },
+                      { key: 'file', label: 'Files', icon: <FileText size={14} /> },
+                    ].map(item => (
+                      <button
+                        key={item.key}
+                        className={`popup-item ${libraryFilter === item.key ? 'library-active' : ''}`}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10 }}
+                        onClick={() => { setLibraryFilter(item.key); setViewStarred(false); setViewTrash(false); setShowLibrary(false); }}
+                      >
+                        {item.icon}
+                        {item.label}
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-secondary)' }}>
+                          {item.key === 'all' ? cards.length : cards.filter(c => c.type === item.key || (item.key === 'video' && c.metadata?.linkType === 'video')).length}
+                        </span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <AnimatePresence>
                 {showSettings && (
@@ -695,91 +671,129 @@ export default function MindApp({ user, onSignOut }) {
               </AnimatePresence>
             </div>
           </nav>
-
-          {/* MAIN CONTENT */}
           <main className="content-area">
-
-            {/* App Title */}
             <div className="giant-search-container">
-              <div className="giant-search">Vivyn</div>
+              <div className="giant-search">Welcome to Vivyn</div>
             </div>
+            {libraryFilter !== 'all' && !viewTrash && !viewStarred && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  {libraryFilter === 'video' ? 'Videos' : libraryFilter + 's'}
+                </span>
+                <button onClick={() => setLibraryFilter('all')} style={{ background: 'var(--tag-bg)', border: 'none', borderRadius: 'var(--radius-pill)', padding: '4px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  Clear filter ×
+                </button>
+              </div>
+            )}
 
             <div className="grid-container">
-              {cards.length > 0 || search || viewTrash ? (
-                <div className="masonry">
+              {(() => {
+                let displayCards = cards;
+                if (libraryFilter !== 'all' && !viewTrash && !viewStarred) {
+                  if (libraryFilter === 'video') {
+                    displayCards = cards.filter(c => c.metadata?.linkType === 'video' || c.type === 'video');
+                  } else {
+                    displayCards = cards.filter(c => c.type === libraryFilter);
+                  }
+                }
 
-                  {/* QUICK ADD INLINE CARD */}
-                  {!search && !viewTrash && !viewStarred && (
-                    <InlineAddCard onSubmit={submitCard} loading={loading} />
-                  )}
+                const pinnedCards = displayCards.filter(c => c.starred && !viewTrash && !viewStarred);
+                const unpinnedCards = viewStarred ? displayCards : displayCards.filter(c => !c.starred || viewTrash);
 
-                  <AnimatePresence mode="popLayout">
-                  {cards.map((c, i) => (
-                    <motion.div
-                      key={c.id}
-                      className={`mind-card ${isImageOnly(c) ? 'image-only' : ''}`}
-                      variants={cardVariants}
-                      initial="hidden"
-                      animate="visible"
-                      exit="exit"
-                      custom={i}
-                      layout
-                      onClick={() => handlePreview(c)}
-                      whileHover={{ y: -4, boxShadow: 'var(--shadow-hover)', transition: { duration: 0.2 } }}
-                    >
-                      {/* ── THUMBNAIL ── */}
-                      <CardThumbnail card={c} />
-
-                      {/* ── BODY ── */}
-                      {!isImageOnly(c) && (
-                        <div className="mind-card-body">
-                          {(c.title || c.type === 'link') && (
-                            <div className="mind-card-title">
-                              {c.title || getHostname(c.content)}
-                            </div>
-                          )}
-
-                          {c.type !== 'link' && c.content && (
-                            <div className="mind-card-text">
-                              {c.type === 'quote' ? `"${c.content}"` : c.content}
-                            </div>
-                          )}
-
-                          <div className="mind-card-meta">
-                            <span className="card-type-badge">
-                              {TYPE_ICONS[c.metadata?.linkType || c.type] || <Link2 size={11} />}
-                              {c.type === 'link' ? getHostname(c.content) : c.type}
-                            </span>
-                            {c.size > 0 && <><FileText size={11} /> {formatBytes(c.size)}</>}
-                            {c.starred && <Star size={11} fill="currentColor" style={{ marginLeft: 'auto' }} />}
+                const renderCard = (c, i) => (
+                  <motion.div
+                    key={c.id}
+                    className={`mind-card ${isImageOnly(c) ? 'image-only' : ''}`}
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    custom={i}
+                    layout
+                    onClick={() => handlePreview(c)}
+                    whileHover={{ y: -4, boxShadow: 'var(--shadow-hover)', transition: { duration: 0.2 } }}
+                  >
+                    <CardThumbnail card={c} />
+                    {!isImageOnly(c) && (
+                      <div className="mind-card-body">
+                        {(c.title || c.type === 'link') && (
+                          <div className="mind-card-title">
+                            {c.title || getHostname(c.content)}
                           </div>
+                        )}
 
-                          {c.tags?.length > 0 && (
-                            <div className="card-tags">
-                              {c.tags.slice(0, 3).map(t => (
-                                <span key={t.id} className="card-tag">{t.name}</span>
-                              ))}
-                            </div>
-                          )}
+                        {c.type !== 'link' && c.content && (
+                          <div className="mind-card-text">
+                            {c.type === 'quote' ? `"${c.content}"` : c.content}
+                          </div>
+                        )}
+                        {c.metadata?.summary && (
+                          <div className="card-summary-snippet">
+                            {c.metadata.summary.length > 120
+                              ? c.metadata.summary.slice(0, 120) + '…'
+                              : c.metadata.summary}
+                          </div>
+                        )}
+
+                        <div className="mind-card-meta">
+                          <span className="card-type-badge">
+                            {TYPE_ICONS[c.metadata?.linkType || c.type] || <Link2 size={11} />}
+                            {c.type === 'link' ? getHostname(c.content) : c.type}
+                          </span>
+                          {c.size > 0 && <><FileText size={11} /> {formatBytes(c.size)}</>}
+                          {c.starred && <Pin size={11} fill="currentColor" style={{ marginLeft: 'auto', color: 'var(--text-primary)' }} />}
                         </div>
+
+                        {c.tags?.length > 0 && (
+                          <div className="card-tags">
+                            {c.tags.slice(0, 3).map(t => (
+                              <span key={t.id} className="card-tag">{t.name}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
+                );
+
+                return displayCards.length > 0 || search || viewTrash ? (
+                  <>
+                    {pinnedCards.length > 0 && (
+                      <div className="pins-section">
+                        <div className="pins-header">
+                          <Pin size={14} />
+                          <span>Pinned</span>
+                          <span className="pins-count">{pinnedCards.length}</span>
+                        </div>
+                        <div className="pins-grid">
+                          <AnimatePresence mode="popLayout">
+                            {pinnedCards.map((c, i) => renderCard(c, i))}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                    )}
+                    <div className="masonry">
+                      {!search && !viewTrash && !viewStarred && (
+                        <InlineAddCard onSubmit={submitCard} loading={loading} />
                       )}
-                    </motion.div>
-                  ))}
-                  </AnimatePresence>
-                </div>
-              ) : (
-                <motion.div className="empty-state" variants={emptyStateVariants} initial="hidden" animate="visible" style={{ position: 'relative' }}>
-                  <AmbientParticles />
-                  <Search size={40} style={{ position: 'relative', zIndex: 1 }} />
-                  <p style={{ position: 'relative', zIndex: 1 }}>Your Vivyn is clear</p>
-                  <div style={{ fontSize: 14, position: 'relative', zIndex: 1 }}>Drop files here or click + to save something</div>
-                </motion.div>
-              )}
+
+                      <AnimatePresence mode="popLayout">
+                        {unpinnedCards.map((c, i) => renderCard(c, i))}
+                      </AnimatePresence>
+                    </div>
+                  </>
+                ) : (
+                  <motion.div className="empty-state" variants={emptyStateVariants} initial="hidden" animate="visible" style={{ position: 'relative' }}>
+                    <AmbientParticles />
+                    <Search size={40} style={{ position: 'relative', zIndex: 1 }} />
+                    <p style={{ position: 'relative', zIndex: 1 }}>Your Vivyn is clear</p>
+                    <div style={{ fontSize: 14, position: 'relative', zIndex: 1 }}>Drop files here or click + to save something</div>
+                  </motion.div>
+                );
+              })()}
             </div>
           </main>
         </div>
-
-        {/* ── QUICK ADD MODAL ── */}
         <AnimatePresence>
         {addModal && (
           <>
@@ -809,7 +823,6 @@ export default function MindApp({ user, onSignOut }) {
                     onChange={e => setAddContent(e.target.value)}
                     autoFocus
                   />
-                  {/* LIVE LINK PREVIEW */}
                   {(linkPreviewLoading || linkPreviewMeta) && (
                     <LinkPreviewCard meta={linkPreviewMeta} isLoading={linkPreviewLoading} />
                   )}
@@ -848,8 +861,6 @@ export default function MindApp({ user, onSignOut }) {
           </>
         )}
         </AnimatePresence>
-
-        {/* ── CARD DETAIL PANEL ── */}
         <AnimatePresence>
         {previewCard && (
           <motion.div className="modal-overlay" onClick={() => { setPreviewCard(null); setPreviewUrl(''); }} variants={modalOverlayVariants} initial="hidden" animate="visible" exit="exit">
@@ -857,8 +868,6 @@ export default function MindApp({ user, onSignOut }) {
 
             <motion.div className="modal-panel" onClick={e => e.stopPropagation()} variants={panelVariants} initial="hidden" animate="visible" exit="exit">
               <button className="modal-close" onClick={() => { setPreviewCard(null); setPreviewUrl(''); }}><X size={18} /></button>
-
-              {/* Source link */}
               {previewCard.type === 'link' && previewCard.content && (
                 <a href={previewCard.content} target="_blank" rel="noopener noreferrer" className="warp-btn">
                   {previewCard.metadata?.favicon && (
@@ -868,15 +877,47 @@ export default function MindApp({ user, onSignOut }) {
                   <ExternalLink size={11} />
                 </a>
               )}
-
-              {/* Rich preview */}
               <DetailPreview card={previewCard} previewUrl={previewUrl} />
 
               <div className="detail-title">{previewCard.title || 'Saved Item'}</div>
-
-
-
-              {/* Tags */}
+              <div className="ai-panel">
+                <div className="ai-panel-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>{previewCard.metadata?.linkType === 'video' ? '🎬 Video Summary' : '✦ Summary'}</span>
+                  <button
+                    onClick={async () => {
+                      toast('✦ Generating AI summary...', 'info');
+                      try {
+                        const meta = previewCard.type === 'link' ? await fetchLinkMeta(previewCard.content) : {};
+                        const aiResult = await autoTagContent(previewCard.content, previewCard.type, { ...previewCard.metadata, ...meta });
+                        if (aiResult.summary) {
+                          const updatedMeta = { ...(previewCard.metadata || {}), summary: aiResult.summary, linkType: meta.type || previewCard.metadata?.linkType };
+                          await svc.updateCard(previewCard.id, { metadata: updatedMeta });
+                          setPreviewCard(prev => prev ? { ...prev, metadata: updatedMeta } : prev);
+                          toast('Summary generated ✓', 'success');
+                          loadData();
+                        } else {
+                          toast('Could not generate summary', 'error');
+                        }
+                      } catch (e) {
+                        console.error('Summary generation failed:', e);
+                        toast('Summary generation failed', 'error');
+                      }
+                    }}
+                    style={{ background: 'none', border: '1px solid var(--border-search)', borderRadius: 'var(--radius-pill)', padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}
+                  >
+                    {previewCard.metadata?.summary ? '↻ Regenerate' : '✦ Generate'}
+                  </button>
+                </div>
+                {previewCard.metadata?.summary ? (
+                  <div className="essence-box">
+                    <div className="essence-text">{previewCard.metadata.summary}</div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '16px 20px', background: 'var(--bg-main)', borderRadius: 'var(--radius-card)', color: 'var(--text-secondary)', fontSize: 13, textAlign: 'center' }}>
+                    No summary yet — click Generate to create one
+                  </div>
+                )}
+              </div>
               <div className="ai-panel">
                 <div className="ai-panel-header">Tags</div>
                 <div className="tags-wave">
@@ -885,10 +926,18 @@ export default function MindApp({ user, onSignOut }) {
                     : <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No tags yet</div>}
                 </div>
               </div>
-
-              {/* Notes */}
               <div className="ai-panel" style={{ flex: 1 }}>
-                <div className="ai-panel-header">Notes</div>
+                <div className="ai-panel-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Notes</span>
+                  {sideSpill !== (previewCard.metadata?.annotation || '') && (
+                    <button
+                      onClick={saveSideSpill}
+                      style={{ background: 'var(--text-primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 'var(--radius-pill)', padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0.5 }}
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
                 <div className="sidespill-box">
                   <textarea
                     className="sidespill-input"
@@ -896,16 +945,18 @@ export default function MindApp({ user, onSignOut }) {
                     value={sideSpill}
                     onChange={e => setSideSpill(e.target.value)}
                     onBlur={saveSideSpill}
+                    onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveSideSpill(); } }}
                     maxLength={500}
                   />
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', textAlign: 'right', marginTop: 4 }}>
+                    {sideSpill.length}/500 {sideSpill !== (previewCard.metadata?.annotation || '') ? '• unsaved' : ''}
+                  </div>
                 </div>
               </div>
-
-              {/* Actions */}
               <div className="action-row">
                 <div className="action-icons">
-                  <button className="action-icon" onClick={() => handleStar(previewCard)} title={previewCard.starred ? 'Unstar' : 'Star'}>
-                    <Star size={18} fill={previewCard.starred ? 'var(--text-primary)' : 'none'} />
+                  <button className="action-icon" onClick={() => handleStar(previewCard)} title={previewCard.starred ? 'Unpin' : 'Pin'}>
+                    <Pin size={18} fill={previewCard.starred ? 'var(--text-primary)' : 'none'} />
                   </button>
                   {previewCard.trashed ? (
                     <>
@@ -935,8 +986,6 @@ export default function MindApp({ user, onSignOut }) {
           </motion.div>
         )}
         </AnimatePresence>
-
-        {/* Drag overlay */}
         <AnimatePresence>
         {dragging && (
           <motion.div className="modal-overlay" style={{ zIndex: 1000, background: 'rgba(26,26,26,0.85)', flexDirection: 'column', gap: 16 }} variants={dragOverlayVariants} initial="hidden" animate="visible" exit="exit">
@@ -947,8 +996,6 @@ export default function MindApp({ user, onSignOut }) {
           </motion.div>
         )}
         </AnimatePresence>
-
-        {/* Toasts */}
         <div className="toast-container">
           <AnimatePresence>
           {toasts.map(t => (

@@ -1,12 +1,9 @@
-// ─── RICH LINK METADATA ───────────────────────────────────────────────────────
-export async function fetchLinkMeta(url) {
-  const u = url.startsWith('http') ? url : 'https://' + url;
 
-  // Strategy 0: YouTube — use YouTube's own oEmbed (CORS-friendly)
+export async function fetchLinkMeta(url) {
+  const u = url.startsWith('http') ? url : 'https://' + url;
   const isYouTube = /youtube\.com|youtu\.be/i.test(u);
   if (isYouTube) {
     try {
-      // Normalize to full youtube.com URL for oembed
       let ytUrl = u;
       const ytMatch = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
       if (ytMatch) {
@@ -21,10 +18,22 @@ export async function fetchLinkMeta(url) {
         if (d.title) {
           const thumb = ytMatch
             ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`
-            : (d.thumbnail_url || '');
+            : (d.thumbnail_url || '');
+          let ytDescription = '';
+          try {
+            const mlRes = await fetch(
+              `https://api.microlink.io?url=${encodeURIComponent(ytUrl)}&meta=true`,
+              { signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined }
+            );
+            const mlData = await mlRes.json();
+            if (mlData.status === 'success') {
+              ytDescription = mlData.data?.description || '';
+            }
+          } catch {}
+
           return {
             title:       d.title,
-            description: '',
+            description: ytDescription,
             image:       thumb,
             screenshot:  '',
             favicon:     'https://www.google.com/s2/favicons?domain=youtube.com&sz=64',
@@ -37,9 +46,7 @@ export async function fetchLinkMeta(url) {
         }
       }
     } catch (e) { console.warn('YouTube oEmbed failed:', e.message); }
-  }
-
-  // Strategy 0b: Vimeo oEmbed
+  }
   const isVimeo = /vimeo\.com/i.test(u);
   if (isVimeo) {
     try {
@@ -65,9 +72,7 @@ export async function fetchLinkMeta(url) {
         }
       }
     } catch {}
-  }
-
-  // Strategy 1: microlink with screenshot
+  }
   try {
     const res = await fetch(
       `https://api.microlink.io?url=${encodeURIComponent(u)}&screenshot=true&meta=true`,
@@ -90,9 +95,7 @@ export async function fetchLinkMeta(url) {
         date:   d.date   || '',
       };
     }
-  } catch {}
-
-  // Strategy 2: allorigins + OG parse
+  } catch {}
   try {
     const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`);
     const data = await res.json();
@@ -111,9 +114,7 @@ export async function fetchLinkMeta(url) {
         url: u,
       };
     }
-  } catch {}
-
-  // Strategy 3: bare minimum
+  } catch {}
   try {
     const hostname = new URL(u).hostname.replace('www.','');
     return {
@@ -137,15 +138,11 @@ function detectType(url, d = {}) {
   if (u.match(/twitter\.com|x\.com/)) return 'tweet';
   if ((d.description||'').length > 200) return 'article';
   return 'link';
-}
-
-// ─── FIX: getUrlThumbnail was imported in MindApp.jsx but missing here ────────
+}
 export function getUrlThumbnail(meta) {
   if (!meta) return null;
   return meta.image || meta.screenshot || null;
-}
-
-// ─── FILE PREVIEW (image/PDF → data URL) ─────────────────────────────────────
+}
 export async function generateFilePreview(file) {
   if (file.type.startsWith('image/')) {
     return { previewUrl: URL.createObjectURL(file), type: 'image' };
@@ -179,29 +176,45 @@ async function renderPdfPage(file) {
   canvas.height = vp.height;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
   return canvas.toDataURL('image/png');
-}
+}
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama3-70b-8192', 'llama3-8b-8192', 'mixtral-8x7b-32768'];
 
-// ─── GROQ AI (kept as-is, used if VITE_GROQ_API_KEY is set) ──────────────────
 export async function callGroq(messages, system = '') {
   const key = import.meta.env.VITE_GROQ_API_KEY;
-  if (!key) return null; // Signal to caller to use Claude fallback
-  try {
-    const msgs = [];
-    if (system) msgs.push({ role:'system', content:system });
-    msgs.push(...messages);
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${key}` },
-      body: JSON.stringify({ model:'llama3-8b-8192', response_format:{type:'json_object'}, messages: msgs }),
-    });
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content || null;
-  } catch(e) {
-    return null;
-  }
-}
+  if (!key) { console.warn('No VITE_GROQ_API_KEY set'); return null; }
 
-// ─── ANTHROPIC CLAUDE AI — primary AI tagger, no key needed ──────────────────
+  for (const model of GROQ_MODELS) {
+    try {
+      const msgs = [];
+      if (system) msgs.push({ role:'system', content:system });
+      msgs.push(...messages);
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${key}` },
+        body: JSON.stringify({ model, max_tokens: 512, temperature: 0.3, response_format:{type:'json_object'}, messages: msgs }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.warn(`Groq model ${model} failed (HTTP ${res.status}):`, errText);
+        continue; // Try next model
+      }
+
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (content) {
+        console.log(`Groq (${model}) returned:`, content.slice(0, 200));
+        return content;
+      }
+      console.warn(`Groq model ${model}: empty response`);
+    } catch(e) {
+      console.warn(`Groq model ${model} error:`, e.message);
+    }
+  }
+
+  console.error('All Groq models failed');
+  return null;
+}
 export async function callClaudeForTags(content, type, meta = {}) {
   const prompt = type === 'link'
     ? `Analyze this saved link. Return ONLY a JSON object, no markdown, no extra text.
@@ -233,9 +246,7 @@ JSON format: {"tags": ["tag1", "tag2"], "title": "concise title under 60 chars",
     const data = await res.json();
     const text = data.content?.find(b => b.type === 'text')?.text || '{}';
     const cleaned = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-
-    // Validate structure
+    const parsed = JSON.parse(cleaned);
     return {
       tags: Array.isArray(parsed.tags) ? parsed.tags.filter(t => typeof t === 'string').slice(0, 6) : [],
       title: typeof parsed.title === 'string' ? parsed.title : '',
@@ -245,30 +256,59 @@ JSON format: {"tags": ["tag1", "tag2"], "title": "concise title under 60 chars",
     console.warn('Claude AI tagging failed, using local fallback:', e.message);
     return generateBasicTags(content, type, meta);
   }
-}
+}
+export async function autoTagContent(content, type, meta = {}) {
+  let groqPrompt;
+  if (type === 'link') {
+    const isVideo = meta.type === 'video' || /youtube\.com|youtu\.be|vimeo\.com/i.test(content);
+    groqPrompt = `You are an expert content analyst. Analyze this URL and generate a detailed summary.
 
-// ─── UNIFIED AI TAGGER — tries Groq first, falls back to local ──────────────
-export async function autoTagContent(content, type, meta = {}) {
-  // Try Groq first (free, fast) if key is configured
-  const groqPrompt = type === 'link'
-    ? `URL: ${meta.url || content}\nTitle: ${meta.title || ''}\nDesc: ${meta.description || ''}\nGive 3-5 relevant tags, a short title, and a 2 sentence summary. JSON: {"tags":["tag1"],"title":"title","summary":"summary"}`
-    : `Text: "${content.slice(0, 400)}"\nGive 2-4 relevant tags, a short title, 1 sentence summary. JSON: {"tags":["tag1"],"title":"title","summary":"summary"}`;
+URL: ${meta.url || content}
+Title: ${meta.title || 'Unknown'}
+Description: ${meta.description || 'None provided'}
+Site: ${meta.siteName || 'Unknown'}
+Author: ${meta.author || 'Unknown'}
+Type: ${isVideo ? 'Video' : 'Webpage'}
 
-  const groqRaw = await callGroq([{ role: 'user', content: groqPrompt }], 'Respond ONLY with valid JSON.');
+INSTRUCTIONS:
+1. Generate 3-5 relevant lowercase tags for categorization
+2. Generate a clear, concise title (under 60 chars)
+3. MOST IMPORTANT: Generate a detailed 2-line summary (2-3 sentences) that captures 90% of what this ${isVideo ? 'video' : 'page'} is about. ${isVideo ? 'Describe what the video covers, its main topic, key points discussed, and what viewers will learn.' : 'Describe the main topic, key information, and what readers will find.'} Be specific and informative, not vague.
+
+Respond with ONLY this JSON:
+{"tags":["tag1","tag2","tag3"],"title":"clear title","summary":"Detailed 2-3 sentence summary covering the main content, key points, and what makes this ${isVideo ? 'video' : 'page'} valuable. Be specific about the topic and details discussed."}`;
+  } else {
+    groqPrompt = `Analyze this saved ${type}. Generate tags, title, and a concise summary.
+
+Content: "${content.slice(0, 600)}"
+
+INSTRUCTIONS:
+1. Generate 2-4 relevant lowercase tags
+2. Generate a short title (under 60 chars)
+3. Generate a 1-2 sentence summary that captures the essence of this content
+
+Respond with ONLY this JSON:
+{"tags":["tag1","tag2"],"title":"short title","summary":"1-2 sentence summary"}`;
+  }
+
+  const systemPrompt = 'You are an intelligent content analysis AI for a personal knowledge base app called Vivyn. Your job is to analyze URLs and content, then generate accurate tags, titles, and DETAILED summaries. For summaries: be specific, informative, and cover the key points. Never say "this video is about..." — instead directly state what the content covers. Respond ONLY with valid JSON, no markdown fences.';
+
+  const groqRaw = await callGroq([{ role: 'user', content: groqPrompt }], systemPrompt);
 
   if (groqRaw) {
     try {
       const parsed = JSON.parse(groqRaw.replace(/```json|```/g, '').trim());
-      if (parsed.tags?.length > 0 || parsed.title) return parsed;
-    } catch {}
-  }
-
-  // Fallback to local tagger (Claude API doesn't support CORS from browser)
-  console.warn('Groq unavailable, using local fallback tagger');
+      if (parsed.summary || parsed.tags?.length > 0 || parsed.title) {
+        console.log('AI summary generated:', parsed.summary?.slice(0, 100));
+        return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to parse Groq response:', e.message, groqRaw?.slice(0, 200));
+    }
+  }
+  console.warn('Groq unavailable or failed, using local fallback tagger');
   return generateBasicTags(content, type, meta);
-}
-
-// ─── LOCAL FALLBACK TAGGER (no API needed) ───────────────────────────────────
+}
 function generateBasicTags(content, type, meta = {}) {
   const tags = new Set([type]);
 
@@ -288,11 +328,22 @@ function generateBasicTags(content, type, meta = {}) {
       }
       tags.add('bookmark');
     } catch {}
-  }
+  }
+  let summary = '';
+  if (meta.description) {
+    summary = meta.description;
+  } else if (meta.title) {
+    const parts = [];
+    if (meta.siteName) parts.push(`From ${meta.siteName}`);
+    if (meta.author) parts.push(`by ${meta.author}`);
+    parts.push(`— ${meta.title}`);
+    summary = parts.join(' ');
+  }
+  if (summary.length > 300) summary = summary.slice(0, 297) + '...';
 
   return {
     tags: [...tags].slice(0, 5),
     title: meta.title || content.slice(0, 60),
-    summary: meta.description || '',
+    summary,
   };
 }
