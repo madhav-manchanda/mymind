@@ -26,7 +26,6 @@ Built with **React**, **Vite**, and **Supabase**, CloudVault features a complete
 ```bash
 git clone https://github.com/yourusername/cloudvault.git
 cd cloudvault
-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
 ```
 
 ### 2. Install Dependencies
